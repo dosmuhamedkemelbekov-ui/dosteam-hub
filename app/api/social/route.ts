@@ -1,0 +1,19 @@
+import { apiJson, cleanText, currentUser, requireHubUser } from "../_lib";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(request:Request) {
+  const url=new URL(request.url); const postId=cleanText(url.searchParams.get("postId"),100); const ctx=await currentUser(); if(!ctx.db)return apiJson({posts:[],comments:[]});
+  if(postId){const comments=await ctx.db.prepare("SELECT cm.id,cm.body,cm.created_at,p.full_name FROM comments cm JOIN profiles p ON p.user_id=cm.user_id WHERE cm.post_id=? AND cm.deleted_at IS NULL ORDER BY cm.created_at ASC LIMIT 100").bind(postId).all();return apiJson({comments:comments.results})}
+  const uid=ctx.user?.id||""; const following=url.searchParams.get("feed")==="following"&&uid;
+  const posts=await ctx.db.prepare(`SELECT p.id,p.body,p.tags_json,p.link_url,p.media_json,p.view_count,p.published_at,c.id club_id,c.name club_name,c.logo_url,c.direction,(SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id=p.id AND pr.type='like') likes,(SELECT COUNT(*) FROM comments cm WHERE cm.post_id=p.id AND cm.deleted_at IS NULL) comments,(SELECT COUNT(*) FROM post_reactions pr2 WHERE pr2.post_id=p.id AND pr2.user_id=? AND pr2.type='like') liked,(SELECT COUNT(*) FROM post_reactions pr3 WHERE pr3.post_id=p.id AND pr3.user_id=? AND pr3.type='save') saved FROM posts p JOIN clubs c ON c.id=p.club_id WHERE p.status='published' ${following?"AND EXISTS (SELECT 1 FROM club_follows cf WHERE cf.club_id=p.club_id AND cf.user_id=?)":""} ORDER BY p.published_at DESC LIMIT 50`).bind(...(following?[uid,uid,uid]:[uid,uid])).all();
+  return apiJson({posts:posts.results,authenticated:Boolean(ctx.user)});
+}
+
+export async function POST(request:Request) {
+  const ctx=await requireHubUser(); if("error" in ctx)return ctx.error; const body=await request.json().catch(()=>({})) as Record<string,unknown>; const action=String(body.action||""); const now=Date.now();
+  if(action==="react") {const postId=cleanText(body.postId,100),type=body.type==="save"?"save":"like";const found=await ctx.db.prepare("SELECT 1 ok FROM post_reactions WHERE post_id=? AND user_id=? AND type=?").bind(postId,ctx.user.id,type).first();if(found){await ctx.db.prepare("DELETE FROM post_reactions WHERE post_id=? AND user_id=? AND type=?").bind(postId,ctx.user.id,type).run();return apiJson({ok:true,active:false})}await ctx.db.prepare("INSERT INTO post_reactions (post_id,user_id,type,created_at) VALUES (?,?,?,?)").bind(postId,ctx.user.id,type,now).run();return apiJson({ok:true,active:true})}
+  if(action==="comment") {const postId=cleanText(body.postId,100),text=cleanText(body.body,1000);if(!text)return apiJson({error:"Комментарий пуст"},400);await ctx.db.prepare("INSERT INTO comments (id,post_id,user_id,body,created_at) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(),postId,ctx.user.id,text,now).run();return apiJson({ok:true})}
+  if(action==="createPost") {const clubId=cleanText(body.clubId,100),text=cleanText(body.body,5000);if(!text)return apiJson({error:"Добавьте текст публикации"},400);if(ctx.user.role!=="admin"){const rights=await ctx.db.prepare("SELECT 1 ok FROM club_memberships WHERE club_id=? AND user_id=? AND role IN ('manager','moderator') AND status='approved'").bind(clubId,ctx.user.id).first();if(!rights)return apiJson({error:"Нет прав публиковать от этого клуба"},403)}const mediaUrl=cleanText(body.mediaUrl,500);await ctx.db.prepare("INSERT INTO posts (id,club_id,author_id,body,tags_json,link_url,media_json,status,view_count,published_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,?,?)").bind(crypto.randomUUID(),clubId,ctx.user.id,text,JSON.stringify(cleanText(body.tags,300).split(/\s+/).filter(x=>x.startsWith("#"))),cleanText(body.linkUrl,500),JSON.stringify(mediaUrl?[{url:mediaUrl,type:cleanText(body.mediaType,100)||"image/jpeg"}]:[]),"published",now,now).run();return apiJson({ok:true})}
+  return apiJson({error:"Неизвестное действие"},400);
+}
