@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import HubApp, { type HubIdentity } from "../hub";
-import { requireChatGPTUser } from "../chatgpt-auth";
+import { requireDosteamUser } from "../dosteam-auth";
 import { hubEnv } from "../api/_lib";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ type ProfileRow = {
 };
 
 export default async function HubPage() {
-  const auth = await requireChatGPTUser("/hub");
+  const auth = await requireDosteamUser("/hub");
   const db = hubEnv.DB;
   if (!db) redirect("/join");
 
@@ -27,16 +27,16 @@ export default async function HubPage() {
        FROM users u
        JOIN profiles p ON p.user_id=u.id
        LEFT JOIN levels l ON l.id=p.level_id
-      WHERE u.email=? AND u.status='active'
+      WHERE u.id=? AND u.status='active'
       LIMIT 1`,
-  ).bind(auth.email.toLowerCase()).first<ProfileRow>();
+  ).bind(auth.id).first<ProfileRow>();
 
   if (!profile) redirect("/join");
 
   const identity: HubIdentity = {
     fullName: profile.full_name,
     firstName: profile.full_name.trim().split(/\s+/)[0] || profile.full_name,
-    initials: profile.full_name.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+    initials: profile.full_name.trim().split(/\s+/).map((part:string) => part[0]).slice(0, 2).join("").toUpperCase(),
     groupName: profile.group_name,
     faculty: profile.faculty || "ЕАГИ",
     avatarUrl: profile.avatar_url,

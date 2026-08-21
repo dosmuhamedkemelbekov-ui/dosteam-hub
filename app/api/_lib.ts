@@ -1,14 +1,12 @@
-import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../chatgpt-auth";
-
-export type HubEnv = { DB?: D1Database; BUCKET?: R2Bucket; DOSTEAM_OWNER_EMAIL?: string };
-export const hubEnv = env as unknown as HubEnv;
+import { getDosteamUser } from "../dosteam-auth";
+export { hubEnv } from "../runtime";
+import { hubEnv } from "../runtime";
 export const apiJson = (data: unknown, status = 200) => Response.json(data, { status, headers: { "cache-control": "no-store" } });
 
 export async function currentUser() {
-  const auth = await getChatGPTUser();
+  const auth = await getDosteamUser();
   if (!auth || !hubEnv.DB) return { auth, user: null, db: hubEnv.DB };
-  const user = await hubEnv.DB.prepare("SELECT id,email,role,status FROM users WHERE email=? LIMIT 1").bind(auth.email.toLowerCase()).first<{ id:string;email:string;role:string;status:string }>();
+  const user = await hubEnv.DB.prepare("SELECT id,email,role,status FROM users WHERE id=? LIMIT 1").bind(auth.id).first<{ id:string;email:string;role:string;status:string }>();
   return { auth, user, db: hubEnv.DB };
 }
 

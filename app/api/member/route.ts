@@ -6,8 +6,9 @@ export async function GET() {
   const ctx=await currentUser();
   if(!ctx.auth)return apiJson({error:"Требуется вход"},401); if(!ctx.db)return apiJson({error:"База недоступна"},503);
   if(!ctx.user)return apiJson({authenticated:true,onboarding:true,email:ctx.auth.email,name:ctx.auth.displayName});
-  const [profile,tickets,memberships,follows,notices]=await Promise.all([
-    ctx.db.prepare("SELECT p.*,l.name_ru level_name FROM profiles p LEFT JOIN levels l ON l.id=p.level_id WHERE p.user_id=?").bind(ctx.user.id).first(),
+  const profile=await ctx.db.prepare("SELECT p.*,l.name_ru level_name FROM profiles p LEFT JOIN levels l ON l.id=p.level_id WHERE p.user_id=?").bind(ctx.user.id).first();
+  if(!profile)return apiJson({authenticated:true,onboarding:true,email:ctx.auth.email,name:ctx.auth.displayName});
+  const [tickets,memberships,follows,notices]=await Promise.all([
     ctx.db.prepare("SELECT r.id,r.ticket_code,r.status,r.registered_at,e.title,e.starts_at,e.ends_at,e.place_text,e.xp_reward,e.coin_reward FROM registrations r JOIN events e ON e.id=r.event_id WHERE r.user_id=? ORDER BY e.starts_at DESC LIMIT 30").bind(ctx.user.id).all(),
     ctx.db.prepare("SELECT m.id,m.status,m.role,c.name,c.direction FROM club_memberships m JOIN clubs c ON c.id=m.club_id WHERE m.user_id=? ORDER BY m.applied_at DESC").bind(ctx.user.id).all(),
     ctx.db.prepare("SELECT c.id,c.name,f.notifications_enabled FROM club_follows f JOIN clubs c ON c.id=f.club_id WHERE f.user_id=? ORDER BY f.created_at DESC").bind(ctx.user.id).all(),
@@ -19,10 +20,10 @@ export async function GET() {
 export async function POST(request:Request) {
   const body=await request.json().catch(()=>({})) as Record<string,unknown>; const action=String(body.action||"");
   if(action==="onboard") {
-    const ctx=await currentUser(); if(!ctx.auth||!ctx.db)return apiJson({error:"Требуется вход"},401); if(ctx.user)return apiJson({ok:true});
+    const ctx=await currentUser(); if(!ctx.auth||!ctx.db||!ctx.user)return apiJson({error:"Требуется вход"},401); const existing=await ctx.db.prepare("SELECT user_id FROM profiles WHERE user_id=?").bind(ctx.user.id).first(); if(existing)return apiJson({ok:true});
     const fullName=cleanText(body.fullName,120)||ctx.auth.displayName; const studentId=cleanText(body.studentId,40); const groupName=cleanText(body.groupName,40); if(!studentId||!groupName)return apiJson({error:"Укажите студенческий ID и группу"},400);
-    const id=crypto.randomUUID(),now=Date.now(); const level=await ctx.db.prepare("SELECT id FROM levels ORDER BY rank LIMIT 1").first<{id:number}>();
-    try{await ctx.db.batch([ctx.db.prepare("INSERT INTO users (id,email,role,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(id,ctx.auth.email.toLowerCase(),"student","active",now,now),ctx.db.prepare("INSERT INTO profiles (user_id,full_name,student_id,faculty,group_name,course,avatar_url,bio,interests_json,xp,coin_balance,level_id,is_public) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)").bind(id,fullName,studentId,cleanText(body.faculty,100),groupName,Number(body.course)||1,cleanText(body.avatarUrl,500),cleanText(body.bio,500),JSON.stringify(Array.isArray(body.interests)?body.interests:[]),0,0,level?.id||null)]);return apiJson({ok:true});}catch{return apiJson({error:"Этот студенческий ID или аккаунт уже зарегистрирован"},409)}
+    const level=await ctx.db.prepare("SELECT id FROM levels ORDER BY rank LIMIT 1").first<{id:number}>();
+    try{await ctx.db.prepare("INSERT INTO profiles (user_id,full_name,student_id,faculty,group_name,course,avatar_url,bio,interests_json,xp,coin_balance,level_id,is_public) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)").bind(ctx.user.id,fullName,studentId,cleanText(body.faculty,100),groupName,Number(body.course)||1,cleanText(body.avatarUrl,500),cleanText(body.bio,500),JSON.stringify(Array.isArray(body.interests)?body.interests:[]),0,0,level?.id||null).run();return apiJson({ok:true});}catch{return apiJson({error:"Этот студенческий ID уже зарегистрирован"},409)}
   }
   const ctx=await requireHubUser(); if("error" in ctx)return ctx.error; const now=Date.now();
   if(action==="registerEvent") {

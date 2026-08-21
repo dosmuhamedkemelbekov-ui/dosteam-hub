@@ -1,0 +1,10 @@
+"use client";
+import { createClient } from "@supabase/supabase-js";
+import { FormEvent, useMemo, useState } from "react";
+
+export default function ResetClient({url,publishableKey}:{url:string;publishableKey:string}){
+  const supabase=useMemo(()=>createClient(url,publishableKey,{auth:{detectSessionInUrl:true,persistSession:true}}),[url,publishableKey]);
+  const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");const [error,setError]=useState("");
+  async function submit(event:FormEvent){event.preventDefault();setBusy(true);setError("");const {error:authError}=await supabase.auth.updateUser({password});if(authError)setError("Ссылка истекла или пароль не принят. Запросите новую ссылку.");else{setMessage("Пароль изменён. Теперь можно войти.");setTimeout(()=>window.location.assign("/auth"),1200)}setBusy(false)}
+  return <main className="authPage"><section className="authBrand"><a className="brand" href="/auth"><span className="brandMark"><b>D</b></span><b>DOSTEAM</b><small>STUDENT HUB · ЕАГИ</small></a><div><span>БЕЗОПАСНОСТЬ АККАУНТА</span><h1>Новый пароль<br/>для <em>DOSTEAM.</em></h1><p>Ссылка восстановления одноразовая и действует ограниченное время.</p></div><small>© 2026 DOSTEAM · ЕАГИ</small></section><section className="authCard"><span>ВОССТАНОВЛЕНИЕ</span><h2>Придумайте новый пароль</h2><p>Не используйте пароль от Gmail или других сервисов.</p>{message&&<div className="authNotice success">{message}</div>}{error&&<div className="authNotice error">{error}</div>}<form onSubmit={submit}><label>НОВЫЙ ПАРОЛЬ<input type="password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="new-password"/></label><label>ПОВТОРИТЕ ПАРОЛЬ<input type="password" minLength={8} value={confirm} onChange={e=>setConfirm(e.target.value)} required autoComplete="new-password"/></label><button className="primary" disabled={busy||password!==confirm}>{busy?"Сохраняем…":"Сохранить пароль"}</button></form></section></main>
+}

@@ -1,25 +1,22 @@
-import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getDosteamUser } from "../../dosteam-auth";
+import { hubEnv } from "../../runtime";
 
 export const dynamic = "force-dynamic";
-
-type RuntimeEnv = { DB?: D1Database; DOSTEAM_OWNER_EMAIL?: string };
-const runtime = env as unknown as RuntimeEnv;
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "cache-control": "no-store" } });
 }
 
 async function identity() {
-  const auth = await getChatGPTUser();
-  if (!auth || !runtime.DB) return { auth, admin: null, db: runtime.DB };
-  const admin = await runtime.DB.prepare("SELECT id, email, role, status FROM users WHERE email = ? LIMIT 1").bind(auth.email.toLowerCase()).first<{ id: string; email: string; role: string; status: string }>();
-  return { auth, admin, db: runtime.DB };
+  const auth = await getDosteamUser();
+  if (!auth || !hubEnv.DB) return { auth, admin: null, db: hubEnv.DB };
+  const admin = await hubEnv.DB.prepare("SELECT id, email, role, status FROM users WHERE id = ? LIMIT 1").bind(auth.id).first<{ id: string; email: string; role: string; status: string }>();
+  return { auth, admin, db: hubEnv.DB };
 }
 
 async function requireAdmin() {
   const ctx = await identity();
-  if (!ctx.auth) return { error: json({ error: "Требуется вход через ChatGPT" }, 401) };
+  if (!ctx.auth) return { error: json({ error: "Требуется вход в DOSTEAM HUB" }, 401) };
   if (!ctx.db) return { error: json({ error: "База данных пока не подключена" }, 503) };
   if (!ctx.admin || ctx.admin.role !== "admin" || ctx.admin.status !== "active") return { error: json({ error: "Нет прав администратора" }, 403) };
   return ctx;
@@ -33,16 +30,15 @@ function value(body: Record<string, unknown>, key: string) {
 
 export async function GET() {
   const { auth, admin, db } = await identity();
-  if (!auth) return json({ error: "Требуется вход через ChatGPT" }, 401);
+  if (!auth) return json({ error: "Требуется вход в DOSTEAM HUB" }, 401);
   if (!db) return json({ error: "База данных пока не подключена" }, 503);
 
-  const ownerEmail = String(runtime.DOSTEAM_OWNER_EMAIL ?? "").toLowerCase();
   if (!admin) return json({
     authenticated: true,
     email: auth.email,
     name: auth.displayName,
     setupRequired: true,
-    canBootstrap: Boolean(ownerEmail && auth.email.toLowerCase() === ownerEmail),
+    canBootstrap: false,
   });
   if (admin.role !== "admin" || admin.status !== "active") return json({ authenticated: true, setupRequired: false, role: admin.role, error: "Нет прав администратора" }, 403);
 
@@ -64,25 +60,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action ?? "");
 
-  if (action === "bootstrap") {
-    const { auth, admin, db } = await identity();
-    if (!auth || !db) return json({ error: "Требуется вход и подключённая база" }, 401);
-    const ownerEmail = String(runtime.DOSTEAM_OWNER_EMAIL ?? "").toLowerCase();
-    if (!ownerEmail || auth.email.toLowerCase() !== ownerEmail) return json({ error: "Первичную настройку может выполнить только владелец сайта" }, 403);
-    if (admin) return json({ ok: true });
-    const id = crypto.randomUUID(); const now = Date.now();
-    await db.batch([
-      db.prepare("INSERT INTO users (id,email,role,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(id, auth.email.toLowerCase(), "admin", "active", now, now),
-      db.prepare("INSERT INTO profiles (user_id,full_name,group_name,xp,coin_balance,interests_json,is_public) VALUES (?,?,?,?,?,?,?)").bind(id, String(body.fullName || auth.displayName), String(body.groupName || "Администрация"), 0, 0, "[]", 0),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Новичок", "Жаңадан бастаушы", 0, 1, "seed"),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Участник", "Қатысушы", 500, 2, "member"),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Активист", "Белсенді", 1500, 3, "spark"),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Лидер", "Көшбасшы", 3000, 4, "leader"),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Амбассадор", "Амбассадор", 6000, 5, "ambassador"),
-      db.prepare("INSERT OR IGNORE INTO levels (name_ru,name_kk,min_xp,rank,icon,is_active) VALUES (?,?,?,?,?,1)").bind("Legend", "Legend", 10000, 6, "legend"),
-    ]);
-    return json({ ok: true });
-  }
+  if (action === "bootstrap") return json({ error:"Первичная настройка больше не используется" }, 400);
 
   const ctx = await requireAdmin();
   if ("error" in ctx) return ctx.error;

@@ -7,6 +7,16 @@ export const users = sqliteTable("users", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(), updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+export const authSessions = sqliteTable("auth_sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+  lastSeenAt: integer("last_seen_at").notNull(),
+  mfaVerifiedAt: integer("mfa_verified_at"),
+}, (t) => [index("auth_sessions_user_idx").on(t.userId), index("auth_sessions_expires_idx").on(t.expiresAt)]);
+
 export const levels = sqliteTable("levels", {
   id: integer("id").primaryKey({ autoIncrement: true }), nameRu: text("name_ru").notNull(), nameKk: text("name_kk"),
   minXp: integer("min_xp").notNull(), rank: integer("rank").notNull(), icon: text("icon"), isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
