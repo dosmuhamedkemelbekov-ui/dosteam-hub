@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Avatar, type View } from "./hub";
+import { Avatar, type HubIdentity, type View } from "./hub";
 
 type Go = (view: View) => void;
 
@@ -23,26 +23,21 @@ const clubCatalog = [
   { name: "Qamqor", type: "Волонтёрство", followers: 381, members: 128, posts: 55, letters: "Q", color: "#16956c", trend: "+14%" },
 ];
 
-const leaderData = [
-  [1,"Аружан Сәрсен","ЮТК-23","Амбассадор",8420,31,"AS"],[2,"Нұрдәулет Әли","ФК-24","Амбассадор",7980,28,"NA"],[3,"Айша Қанат","ПДР-23","Лидер",7650,26,"AQ"],
-  [4,"Мирас Омар","ЭК-24","Лидер",6940,24,"MO"],[5,"Әмина Жақсы","ЮТК-24","Лидер",6310,22,"AJ"],[6,"Санжар Бек","ФК-23","Активист",5890,19,"SB"],
-];
-
 type CatalogEvent = { id:string|number; date:string; month:string; title:string; time:string; place:string; club:string; seats:number; total:number; reward:string; category:string; color:string; ticketCode?:string };
 type ClubCard = { id?:string; name:string; type:string; followers:string|number; members:number; posts:number; letters:string; color:string; trend:string };
 
-type LiveData = { events: Record<string, unknown>[]; clubs: Record<string, unknown>[]; rooms: Record<string, unknown>[]; summary: Record<string, unknown> };
+type LiveData = { events: Record<string, unknown>[]; clubs: Record<string, unknown>[]; rooms: Record<string, unknown>[]; leaderboard:Record<string,unknown>[]; summary: Record<string, unknown> };
 function useLiveData() {
   const [data,setData]=useState<LiveData|null>(null);
-  useEffect(()=>{fetch("/api/public").then(r=>r.json()).then(setData).catch(()=>setData({events:[],clubs:[],rooms:[],summary:{}}))},[]);
+  useEffect(()=>{fetch("/api/public").then(r=>r.json()).then(setData).catch(()=>setData({events:[],clubs:[],rooms:[],leaderboard:[],summary:{}}))},[]);
   return data;
 }
 
-export default function RoutedView({ view, go, flash }: { view: View; go: Go; flash: (message: string) => void }) {
+export default function RoutedView({ view, go, flash, identity }: { view: View; go: Go; flash: (message: string) => void; identity:HubIdentity }) {
   if (view === "events") return <EventsView flash={flash} />;
   if (view === "clubs") return <ClubsView flash={flash} />;
   if (view === "feed") return <FeedView flash={flash} />;
-  if (view === "leaderboard") return <LeaderboardView />;
+  if (view === "leaderboard") return <LeaderboardView identity={identity} />;
   if (view === "rooms") return <RoomsView flash={flash} />;
   if (view === "rewards") return <RewardsView flash={flash} />;
   if (view === "profile") return <ProfileView go={go} />;
@@ -92,12 +87,15 @@ function FeedView({ flash }: { flash: (message: string) => void }) {
   </div>;
 }
 
-function LeaderboardView() {
-  const [period,setPeriod]=useState("Семестр");
-  return <div className="pageContent"><PageIntro eyebrow="АКТИВНОСТЬ, КОТОРАЯ ВИДНА" title="Рейтинг студентов" text="Рейтинг строится на XP, заработанном за реальное участие в жизни ЕАГИ."/>
-    <div className="rankFilters"><div>{["Общий","Факультет","Группа","Клуб"].map(x=><button className={x==="Общий"?"active":""} key={x}>{x}</button>)}</div><select value={period} onChange={e=>setPeriod(e.target.value)}><option>Месяц</option><option>Семестр</option><option>Учебный год</option></select></div>
-    <div className="podium"><div className="podiumPerson second"><Avatar text="NA"/><i>2</i><b>Нұрдәулет Әли</b><span>7 980 XP</span></div><div className="podiumPerson first"><div className="crown">♛</div><Avatar text="AS"/><i>1</i><b>Аружан Сәрсен</b><span>8 420 XP</span></div><div className="podiumPerson third"><Avatar text="AQ"/><i>3</i><b>Айша Қанат</b><span>7 650 XP</span></div></div>
-    <section className="rankTable"><header><span>МЕСТО</span><span>СТУДЕНТ</span><span>УРОВЕНЬ</span><span>ДОСТИЖЕНИЯ</span><span>XP</span></header>{leaderData.map(r=><div key={r[0]}><strong>{r[0]}</strong><span className="rankStudent"><Avatar text={String(r[6])} small/><b>{r[1]}<small>{r[2]}</small></b></span><span><em>{r[3]}</em></span><span>{r[5]}</span><b>{Number(r[4]).toLocaleString("ru-RU")}</b></div>)}<div className="myRank"><strong>12</strong><span className="rankStudent"><Avatar text="DK" small/><b>Досмухамед <i>ВЫ</i><small>ЮТК-25</small></b></span><span><em>Лидер</em></span><span>14</span><b>2 450</b></div></section>
+function LeaderboardView({identity}:{identity:HubIdentity}) {
+  const live=useLiveData();
+  const rows=live?.leaderboard||[];
+  const podium=rows.slice(0,3);
+  const initials=(name:unknown)=>String(name||"S").split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+  return <div className="pageContent"><PageIntro eyebrow="АКТИВНОСТЬ, КОТОРАЯ ВИДНА" title="Рейтинг студентов" text="Здесь только реальные профили. Место определяется количеством подтверждённого XP."/>
+    <div className="rankFilters"><div><button className="active">Общий рейтинг</button></div><select defaultValue="all" aria-label="Период рейтинга"><option value="all">За всё время</option></select></div>
+    {!live?<LiveLoading/>:rows.length?<><div className="podium">{podium.map((row,index)=><div className={`podiumPerson ${index===0?"first":index===1?"second":"third"}`} key={String(row.user_id)}>{index===0&&<div className="crown">♛</div>}<Avatar text={initials(row.full_name)} imageUrl={row.avatar_url?String(row.avatar_url):null}/><i>{index+1}</i><b>{String(row.full_name)}</b><span>{Number(row.xp||0).toLocaleString("ru-RU")} XP</span></div>)}</div>
+    <section className="rankTable"><header><span>МЕСТО</span><span>СТУДЕНТ</span><span>УРОВЕНЬ</span><span>ДОСТИЖЕНИЯ</span><span>XP</span></header>{rows.map((row,index)=><div className={String(row.user_id)===identity.userId?"myRank":""} key={String(row.user_id)}><strong>{index+1}</strong><span className="rankStudent"><Avatar text={initials(row.full_name)} imageUrl={row.avatar_url?String(row.avatar_url):null} small/><b>{String(row.full_name)}{String(row.user_id)===identity.userId&&<i> ВЫ</i>}<small>{String(row.group_name||"ЕАГИ")}</small></b></span><span><em>{String(row.level_name||"Новичок")}</em></span><span>{Number(row.achievements||0)}</span><b>{Number(row.xp||0).toLocaleString("ru-RU")}</b></div>)}</section></>:<LiveEmpty title="Рейтинг пока пуст" text="Он появится, когда студенты заполнят публичные профили."/>}
   </div>;
 }
 

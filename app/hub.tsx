@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RoutedView from "./views";
 
 export type View = "dashboard" | "feed" | "events" | "clubs" | "leaderboard" | "rooms" | "rewards" | "profile" | "admin";
 
 export type HubIdentity = {
+  userId: string;
   fullName: string;
   firstName: string;
   initials: string;
@@ -38,12 +39,6 @@ const clubs = [
   { name: "Business Club", tag: "Предпринимательство", members: 162, initials: "BC", color: "#e58924" },
 ];
 
-const leaders = [
-  { rank: 1, name: "Аружан Сәрсен", group: "ЮТК-23", xp: 8420, level: "Амбассадор", badge: "AS" },
-  { rank: 2, name: "Нұрдәулет Әли", group: "ФК-24", xp: 7980, level: "Амбассадор", badge: "NA" },
-  { rank: 3, name: "Айша Қанат", group: "ПДР-23", xp: 7650, level: "Лидер", badge: "AQ" },
-];
-
 function Logo({ compact = false }: { compact?: boolean }) {
   return <div className="brand" aria-label="DOSTEAM HUB"><div className="brandMark"><span>D</span></div>{!compact && <div><b>DOSTEAM</b><small>STUDENT HUB</small></div>}</div>;
 }
@@ -52,8 +47,8 @@ function RingProgress({ value = 72 }: { value?: number }) {
   return <div className="ring" style={{ "--progress": `${value * 3.6}deg` } as React.CSSProperties}><div><strong>{value}%</strong><span>прогресс</span></div></div>;
 }
 
-export function Avatar({ text = "DK", small = false }: { text?: string; small?: boolean }) {
-  return <div className={`avatar ${small ? "small" : ""}`}>{text}</div>;
+export function Avatar({ text = "DK", small = false, imageUrl = null }: { text?: string; small?: boolean; imageUrl?: string|null }) {
+  return <div className={`avatar ${small ? "small" : ""}`}>{imageUrl?<img src={imageUrl} alt=""/>:text}</div>;
 }
 
 export default function HubApp({ identity }: { identity: HubIdentity }) {
@@ -77,17 +72,17 @@ export default function HubApp({ identity }: { identity: HubIdentity }) {
         {identity.role === "admin" && <button onClick={() => go("admin")} className={view === "admin" ? "active" : ""}><span>◈</span>Admin Panel</button>}
       </nav>
       <div className="sidebarCard"><span className="miniSun">✦</span><strong>Стань активнее</strong><p>До нового достижения осталось 2 мероприятия.</p><button onClick={() => go("events")}>Найти событие →</button></div>
-      <div className="sideProfile" onClick={() => go("profile")} role="button" tabIndex={0}><Avatar text={identity.initials} small /><div><strong>{identity.firstName}</strong><span>{identity.groupName} · {identity.levelName}</span></div><b>•••</b></div>
+      <div className="sideProfile" onClick={() => go("profile")} role="button" tabIndex={0}><Avatar text={identity.initials} imageUrl={identity.avatarUrl} small /><div><strong>{identity.firstName}</strong><span>{identity.groupName} · {identity.levelName}</span></div><b>•••</b></div>
     </aside>
 
     <main className="mainArea">
       <header className="topbar">
         <div className="mobileLogo"><Logo compact /></div><div><p className="eyebrow">DOSTEAM HUB</p><h1>{title}</h1></div>
-        <div className="topActions"><button className="iconButton" onClick={() => setSearchOpen(true)} aria-label="Поиск">⌕</button><button className="iconButton notice" onClick={() => setNoticeOpen(!noticeOpen)} aria-label="Уведомления">♢<i /></button><div className="coinPill"><span>◉</span><b>{identity.coins.toLocaleString("ru-RU")}</b><em>DC</em></div><button className="accountButton" onClick={()=>setAccountOpen(!accountOpen)} aria-label="Аккаунт"><Avatar text={identity.initials} small /></button></div>
+        <div className="topActions"><button className="iconButton" onClick={() => setSearchOpen(true)} aria-label="Поиск">⌕</button><button className="iconButton notice" onClick={() => setNoticeOpen(!noticeOpen)} aria-label="Уведомления">♢<i /></button><div className="coinPill"><span>◉</span><b>{identity.coins.toLocaleString("ru-RU")}</b><em>DC</em></div><button className="accountButton" onClick={()=>setAccountOpen(!accountOpen)} aria-label="Аккаунт"><Avatar text={identity.initials} imageUrl={identity.avatarUrl} small /></button></div>
         {noticeOpen && <div className="popover notifications"><div className="popoverHead"><strong>Уведомления</strong><button onClick={() => setNoticeOpen(false)}>×</button></div><div className="noticeItem new"><span>+30</span><div><b>DC Coins начислены</b><p>За волонтёрство на EAGI CUP · 5 мин</p></div></div><div className="noticeItem"><span>✓</span><div><b>Заявка одобрена</b><p>Вы приняты в EAGI Running · 2 ч</p></div></div><div className="noticeItem"><span>◇</span><div><b>Событие скоро начнётся</b><p>Welcome Day — завтра в 16:00</p></div></div><button className="fullLink">Все уведомления</button></div>}
-        {accountOpen && <div className="popover accountMenu"><div className="accountSummary"><Avatar text={identity.initials}/><div><b>{identity.fullName}</b><span>{identity.groupName} · {identity.levelName}</span></div></div><p>МОЙ АККАУНТ</p><button onClick={()=>go("profile")}><span>♙</span>Личный кабинет<i>→</i></button>{canScan&&<button onClick={()=>window.location.assign("/scan")}><span>⌗</span>QR Scanner<i>→</i></button>}{identity.role==="admin"&&<button onClick={()=>go("admin")}><span>◈</span>Admin Panel<i>→</i></button>}<button className="signOut" onClick={()=>window.location.assign("/api/auth/logout")}>Выйти</button></div>}
+        {accountOpen && <div className="popover accountMenu"><div className="accountSummary"><Avatar text={identity.initials} imageUrl={identity.avatarUrl}/><div><b>{identity.fullName}</b><span>{identity.groupName} · {identity.levelName}</span></div></div><p>МОЙ АККАУНТ</p><button onClick={()=>go("profile")}><span>♙</span>Личный кабинет<i>→</i></button>{canScan&&<button onClick={()=>window.location.assign("/scan")}><span>⌗</span>QR Scanner<i>→</i></button>}{identity.role==="admin"&&<button onClick={()=>go("admin")}><span>◈</span>Admin Panel<i>→</i></button>}<button className="signOut" onClick={()=>window.location.assign("/api/auth/logout")}>Выйти</button></div>}
       </header>
-      {view === "dashboard" ? <Dashboard go={go} flash={flash} identity={identity} /> : <RoutedView view={view} go={go} flash={flash} />}
+      {view === "dashboard" ? <Dashboard go={go} flash={flash} identity={identity} /> : <RoutedView view={view} go={go} flash={flash} identity={identity} />}
     </main>
 
     <nav className="mobileNav">{nav.slice(0, 5).map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => go(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav>
@@ -96,6 +91,10 @@ export default function HubApp({ identity }: { identity: HubIdentity }) {
 }
 
 function Dashboard({ go, flash, identity }: { go: (view: View) => void; flash: (message: string) => void; identity: HubIdentity }) {
+  const [live,setLive]=useState<{leaderboard:Record<string,unknown>[];summary:Record<string,unknown>}|null>(null);
+  useEffect(()=>{fetch("/api/public").then(r=>r.json()).then(data=>setLive({leaderboard:data.leaderboard||[],summary:data.summary||{}})).catch(()=>setLive({leaderboard:[],summary:{}}))},[]);
+  const leaders=(live?.leaderboard||[]).slice(0,3);
+  const rank=(live?.leaderboard||[]).findIndex(row=>String(row.user_id)===identity.userId)+1;
   return <div className="pageContent dashboard">
     <section className="heroPanel">
       <div className="heroCopy"><div className="statusLine"><span>●</span> ЛИЧНЫЙ HUB АКТИВЕН</div><h2>Добрый день,<br/><em>{identity.firstName}!</em></h2><p>{identity.groupName} · {identity.faculty}<br/>Твоя активность формирует цифровое портфолио ЕАГИ.</p><div className="heroActions"><button className="primary" onClick={() => go("events")}>Найти мероприятие <span>↗</span></button><button className="secondary" onClick={() => go("profile")}>Мой профиль</button></div></div>
@@ -103,7 +102,7 @@ function Dashboard({ go, flash, identity }: { go: (view: View) => void; flash: (
     </section>
 
     <section className="metricGrid">
-      <button onClick={() => go("leaderboard")} className="metricCard"><div className="metricIcon gold">↗</div><div><span>ПОЗИЦИЯ В РЕЙТИНГЕ</span><strong>#12</strong><p><b>↑ 3</b> за этот месяц</p></div><em>→</em></button>
+      <button onClick={() => go("leaderboard")} className="metricCard"><div className="metricIcon gold">↗</div><div><span>ПОЗИЦИЯ В РЕЙТИНГЕ</span><strong>{rank?`#${rank}`:"—"}</strong><p>{rank?"По реальным данным":"Профиль скрыт"}</p></div><em>→</em></button>
       <button onClick={() => go("rewards")} className="metricCard"><div className="metricIcon black">◉</div><div><span>DC COINS</span><strong>{identity.coins.toLocaleString("ru-RU")}</strong><p>Текущий баланс</p></div><em>→</em></button>
       <button onClick={() => go("profile")} className="metricCard"><div className="metricIcon purple">✦</div><div><span>ДОСТИЖЕНИЯ</span><strong>14</strong><p>2 почти открыты</p></div><em>→</em></button>
       <button onClick={() => go("events")} className="metricCard"><div className="metricIcon blue">◇</div><div><span>ПОСЕЩЕНО</span><strong>23</strong><p>мероприятия</p></div><em>→</em></button>
@@ -114,7 +113,7 @@ function Dashboard({ go, flash, identity }: { go: (view: View) => void; flash: (
     </div>
 
     <div className="contentGrid lower"><section className="sectionCard clubsPanel"><div className="sectionHead"><div><span>СООБЩЕСТВА</span><h3>Популярные клубы</h3></div><button onClick={() => go("clubs")}>Все клубы →</button></div><div className="clubGrid">{clubs.map((club) => <article key={club.name}><div className="clubLogo" style={{ background: club.color }}>{club.initials}</div><div><h4>{club.name}</h4><p>{club.tag}</p><span>{club.members} участников</span></div><button onClick={() => flash(`Вы подписались на ${club.name}`)}>+</button></article>)}</div></section>
-      <section className="sectionCard ratingPanel"><div className="sectionHead"><div><span>ТОП СТУДЕНТОВ</span><h3>Лидерборд</h3></div><button onClick={() => go("leaderboard")}>Рейтинг →</button></div>{leaders.map((leader) => <div className="leader" key={leader.rank}><strong className={`rank r${leader.rank}`}>{leader.rank}</strong><Avatar text={leader.badge} small/><div><b>{leader.name}</b><span>{leader.group} · {leader.level}</span></div><em>{leader.xp.toLocaleString("ru-RU")} XP</em></div>)}<div className="leader me"><strong className="rank">—</strong><Avatar text={identity.initials} small/><div><b>{identity.firstName} <i>Вы</i></b><span>{identity.groupName} · {identity.levelName}</span></div><em>{identity.xp.toLocaleString("ru-RU")} XP</em></div></section>
+      <section className="sectionCard ratingPanel"><div className="sectionHead"><div><span>ТОП СТУДЕНТОВ</span><h3>Лидерборд</h3></div><button onClick={() => go("leaderboard")}>Рейтинг →</button></div>{leaders.length?leaders.map((leader,index)=><div className={`leader ${String(leader.user_id)===identity.userId?"me":""}`} key={String(leader.user_id)}><strong className={`rank r${index+1}`}>{index+1}</strong><Avatar text={String(leader.full_name||"S").split(/\s+/).map(x=>x[0]).slice(0,2).join("")} imageUrl={leader.avatar_url?String(leader.avatar_url):null} small/><div><b>{String(leader.full_name)}{String(leader.user_id)===identity.userId&&<i> Вы</i>}</b><span>{String(leader.group_name||"ЕАГИ")} · {String(leader.level_name||"Новичок")}</span></div><em>{Number(leader.xp||0).toLocaleString("ru-RU")} XP</em></div>):<div className="emptyMini"><b>Рейтинг пока пуст</b><span>Он заполнится реальными профилями студентов.</span></div>}</section>
     </div>
 
     <section className="pulseStrip"><div><span>DOSTEAM PULSE</span><h3>Студенческая жизнь в цифрах</h3></div><div className="pulseStats"><p><strong>2 847</strong><span>студентов</span></p><i/><p><strong>34</strong><span>активных клуба</span></p><i/><p><strong>126</strong><span>событий за семестр</span></p><i/><p><strong>78%</strong><span>средняя посещаемость</span></p></div></section>

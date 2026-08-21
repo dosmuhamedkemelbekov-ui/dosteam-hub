@@ -34,6 +34,7 @@ export default async function HubPage() {
   if (!profile) redirect("/join");
 
   const identity: HubIdentity = {
+    userId: auth.id,
     fullName: profile.full_name,
     firstName: profile.full_name.trim().split(/\s+/)[0] || profile.full_name,
     initials: profile.full_name.trim().split(/\s+/).map((part:string) => part[0]).slice(0, 2).join("").toUpperCase(),
