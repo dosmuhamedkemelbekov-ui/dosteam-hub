@@ -26,6 +26,22 @@ export async function POST(request:Request) {
     try{await ctx.db.prepare("INSERT INTO profiles (user_id,full_name,student_id,faculty,group_name,course,avatar_url,bio,interests_json,xp,coin_balance,level_id,is_public) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)").bind(ctx.user.id,fullName,studentId,cleanText(body.faculty,100),groupName,Number(body.course)||1,cleanText(body.avatarUrl,500),cleanText(body.bio,500),JSON.stringify(Array.isArray(body.interests)?body.interests:[]),0,0,level?.id||null).run();return apiJson({ok:true});}catch{return apiJson({error:"Этот студенческий ID уже зарегистрирован"},409)}
   }
   const ctx=await requireHubUser(); if("error" in ctx)return ctx.error; const now=Date.now();
+  if(action==="updateProfile") {
+    const fullName=cleanText(body.fullName,120),studentId=cleanText(body.studentId,40),groupName=cleanText(body.groupName,40);
+    if(!fullName||!studentId||!groupName)return apiJson({error:"Укажите имя, студенческий ID и группу"},400);
+    const current=await ctx.db.prepare("SELECT avatar_url FROM profiles WHERE user_id=?").bind(ctx.user.id).first<{avatar_url:string|null}>();
+    if(!current)return apiJson({error:"Профиль не найден",onboarding:true},404);
+    const avatarUrl=Object.prototype.hasOwnProperty.call(body,"avatarUrl")?cleanText(body.avatarUrl,500):current.avatar_url;
+    const interests=Array.isArray(body.interests)?body.interests.map(x=>cleanText(x,40)).filter(Boolean).slice(0,12):[];
+    try{
+      await ctx.db.batch([
+        ctx.db.prepare("UPDATE profiles SET full_name=?,student_id=?,faculty=?,group_name=?,course=?,avatar_url=?,bio=?,interests_json=?,is_public=? WHERE user_id=?")
+          .bind(fullName,studentId,cleanText(body.faculty,100),groupName,Math.min(8,Math.max(1,Number(body.course)||1)),avatarUrl,cleanText(body.bio,500),JSON.stringify(interests),body.isPublic===false?0:1,ctx.user.id),
+        ctx.db.prepare("UPDATE users SET updated_at=? WHERE id=?").bind(now,ctx.user.id),
+      ]);
+      return apiJson({ok:true});
+    }catch{return apiJson({error:"Такой студенческий ID уже используется"},409)}
+  }
   if(action==="registerEvent") {
     const eventId=cleanText(body.eventId,100); const event=await ctx.db.prepare("SELECT id,title,capacity,starts_at,status FROM events WHERE id=?").bind(eventId).first<{id:string;title:string;capacity:number;starts_at:number;status:string}>(); if(!event||event.status!=="published")return apiJson({error:"Регистрация закрыта"},400);
     const count=await ctx.db.prepare("SELECT COUNT(*) total FROM registrations WHERE event_id=? AND status!='cancelled'").bind(eventId).first<{total:number}>(); if(Number(count?.total||0)>=event.capacity)return apiJson({error:"Свободных мест больше нет"},409);
