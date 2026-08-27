@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createDosteamSession, safeReturnTo } from "../../../dosteam-auth";
+import { createDosteamSession, rememberAdminDevice, safeReturnTo } from "../../../dosteam-auth";
 import { authErrorMessage, supabaseAuthClient } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
     if (error) return Response.json({ error:"Неверный или устаревший код" }, { status:401 });
     await createDosteamSession(userId, true);
+    await rememberAdminDevice(userId);
     const returnTo = safeReturnTo(jar.get("dosteam_pending_return")?.value || "/manage");
     clearPending(jar);
     return Response.json({ ok:true, returnTo: returnTo === "/join" ? "/manage" : returnTo });
@@ -34,4 +35,3 @@ export async function POST(request: Request) {
     return Response.json({ error:authErrorMessage(error instanceof Error ? error.message : "mfa failed") }, { status:400 });
   }
 }
-

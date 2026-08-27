@@ -1,50 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Avatar, type View } from "./hub";
+import { Avatar, type HubIdentity, type View } from "./hub";
 
 type Go = (view: View) => void;
 
-const eventCatalog = [
-  { id: 1, title: "EAGI Welcome Day", category: "Комьюнити", day: "24", month: "авг", time: "16:00", place: "Конференц-зал", club: "DOSTEAM Community", free: 38, total: 120, reward: "+40 XP · +10 DC", color: "eventYellow" },
-  { id: 2, title: "Open Run: 5K", category: "Спорт", day: "26", month: "авг", time: "18:30", place: "Триатлон парк", club: "EAGI Running", free: 14, total: 60, reward: "+35 XP · +10 DC", color: "eventBlue" },
-  { id: 3, title: "От идеи к MVP", category: "Бизнес", day: "29", month: "авг", time: "17:00", place: "Аудитория 305", club: "Business Club", free: 22, total: 80, reward: "+50 XP · +10 DC", color: "eventOrange" },
-  { id: 4, title: "Movie Night: Interstellar", category: "Культура", day: "02", month: "сен", time: "18:00", place: "Актовый зал", club: "Movie Club", free: 71, total: 150, reward: "+25 XP · +10 DC", color: "eventPurple" },
-  { id: 5, title: "Debate Open Cup", category: "Образование", day: "05", month: "сен", time: "14:00", place: "Аудитория 201", club: "Debate Club", free: 16, total: 64, reward: "+80 XP · +20 DC", color: "eventRed" },
-  { id: 6, title: "Volunteer Day", category: "Волонтёрство", day: "09", month: "сен", time: "10:00", place: "Сбор у ЕАГИ", club: "Qamqor", free: 45, total: 90, reward: "+100 XP · +30 DC", color: "eventGreen" },
-];
-
-const clubCatalog = [
-  { name: "DOSTEAM Community", type: "Студенческое сообщество", followers: "1.2K", members: 486, posts: 92, letters: "DS", color: "#111", trend: "+12%" },
-  { name: "EAGI Running", type: "Спорт и здоровье", followers: 824, members: 214, posts: 64, letters: "ER", color: "#2672ff", trend: "+18%" },
-  { name: "Debate Club", type: "Дебаты и soft skills", followers: 532, members: 178, posts: 47, letters: "DC", color: "#7442d6", trend: "+7%" },
-  { name: "Business Club", type: "Предпринимательство", followers: 445, members: 162, posts: 39, letters: "BC", color: "#e78b27", trend: "+21%" },
-  { name: "Media Club", type: "Медиа и творчество", followers: 730, members: 96, posts: 108, letters: "MC", color: "#e04465", trend: "+9%" },
-  { name: "Qamqor", type: "Волонтёрство", followers: 381, members: 128, posts: 55, letters: "Q", color: "#16956c", trend: "+14%" },
-];
-
-const leaderData = [
-  [1,"Аружан Сәрсен","ЮТК-23","Амбассадор",8420,31,"AS"],[2,"Нұрдәулет Әли","ФК-24","Амбассадор",7980,28,"NA"],[3,"Айша Қанат","ПДР-23","Лидер",7650,26,"AQ"],
-  [4,"Мирас Омар","ЭК-24","Лидер",6940,24,"MO"],[5,"Әмина Жақсы","ЮТК-24","Лидер",6310,22,"AJ"],[6,"Санжар Бек","ФК-23","Активист",5890,19,"SB"],
-];
-
 type CatalogEvent = { id:string|number; date:string; month:string; title:string; time:string; place:string; club:string; seats:number; total:number; reward:string; category:string; color:string; ticketCode?:string };
-type ClubCard = { id?:string; name:string; type:string; followers:string|number; members:number; posts:number; letters:string; color:string; trend:string };
+type ClubCard = { id?:string; name:string; type:string; description:string; followers:string|number; members:number; posts:number; letters:string; color:string; logoUrl?:string; instagram?:string;telegram?:string };
 
-type LiveData = { events: Record<string, unknown>[]; clubs: Record<string, unknown>[]; rooms: Record<string, unknown>[]; summary: Record<string, unknown> };
+type LiveData = { events: Record<string, unknown>[]; clubs: Record<string, unknown>[]; rooms: Record<string, unknown>[]; leaderboard:Record<string,unknown>[]; summary: Record<string, unknown> };
 function useLiveData() {
   const [data,setData]=useState<LiveData|null>(null);
-  useEffect(()=>{fetch("/api/public").then(r=>r.json()).then(setData).catch(()=>setData({events:[],clubs:[],rooms:[],summary:{}}))},[]);
+  useEffect(()=>{fetch("/api/public").then(r=>r.json()).then(setData).catch(()=>setData({events:[],clubs:[],rooms:[],leaderboard:[],summary:{}}))},[]);
   return data;
 }
 
-export default function RoutedView({ view, go, flash }: { view: View; go: Go; flash: (message: string) => void }) {
+export default function RoutedView({ view, go, flash, identity }: { view: View; go: Go; flash: (message: string) => void; identity:HubIdentity }) {
   if (view === "events") return <EventsView flash={flash} />;
   if (view === "clubs") return <ClubsView flash={flash} />;
   if (view === "feed") return <FeedView flash={flash} />;
-  if (view === "leaderboard") return <LeaderboardView />;
+  if (view === "leaderboard") return <LeaderboardView identity={identity} />;
   if (view === "rooms") return <RoomsView flash={flash} />;
-  if (view === "rewards") return <RewardsView flash={flash} />;
+  if (view === "achievements") return <AchievementsView />;
+  if (view === "rewards") return <RewardsView identity={identity} />;
   if (view === "profile") return <ProfileView go={go} />;
   if (view === "admin") return <AdminView flash={flash} />;
   return null;
@@ -59,7 +37,7 @@ function EventsView({ flash }: { flash: (message: string) => void }) {
   const source=(live?.events||[]).map((e,i)=>{const d=new Date(Number(e.starts_at));return{id:String(e.id),date:String(d.getDate()).padStart(2,"0"),month:d.toLocaleString("ru-RU",{month:"short"}).replace(".",""),title:String(e.title),time:d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),place:String(e.place_text||"ЕАГИ"),club:String(e.club_name||"DOSTEAM"),seats:Math.max(0,Number(e.capacity)-Number(e.registered||0)),total:Number(e.capacity),reward:`+${Number(e.xp_reward||0)} XP · +${Number(e.coin_reward||0)} DC`,category:String(e.category||"Другое"),color:["eventYellow","eventBlue","eventOrange","eventPurple"][i%4]}});
   const filtered=filter==="Все"?source:source.filter(e=>e.category===filter);
   const register=async(event:CatalogEvent)=>{const r=await fetch("/api/member",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"registerEvent",eventId:event.id,source:"hub"})});const result=await r.json();if(r.status===401||result.onboarding){window.location.assign("/join");return}if(!r.ok){flash(result.error||"Не удалось зарегистрироваться");return}setTicket({...event,ticketCode:result.ticketCode})};
-  return <div className="pageContent"><PageIntro eyebrow="УЧАСТВУЙ И РАЗВИВАЙСЯ" title="Мероприятия" text="Выбирай активность, регистрируйся и получай XP и DC Coins." action={<button className="darkButton" onClick={()=>flash("Календарь добавлен в план")}>Мой календарь</button>}/>
+  return <div className="pageContent"><PageIntro eyebrow="УЧАСТВУЙ И РАЗВИВАЙСЯ" title="Мероприятия" text="Здесь отображаются только опубликованные организаторами события."/>
     <div className="filterBar">{["Все","Спорт","Бизнес","Образование","Культура","Волонтёрство"].map(x=><button key={x} className={filter===x?"active":""} onClick={()=>setFilter(x)}>{x}</button>)}<div className="filterSearch">⌕ <input placeholder="Поиск событий"/></div></div>
     {!live?<LiveLoading/>:filtered.length?<div className="eventCatalog">{filtered.map((event)=><article className="eventTile" key={event.id}><div className={`eventPoster ${event.color}`}><span>{event.category}</span><div className="posterDate"><b>{event.date}</b><small>{event.month}</small></div><em>DOSTEAM<br/>HUB</em></div><div className="eventTileBody"><span>{event.club}</span><h3>{event.title}</h3><p>◷ {event.time} &nbsp; · &nbsp; ⌖ {event.place}</p><div className="capacity"><div><i style={{width:`${100-event.seats/event.total*100}%`}}/></div><small>{event.seats} свободно из {event.total}</small></div><div className="eventTileFoot"><b>{event.reward}</b><button onClick={()=>register(event)}>Зарегистрироваться</button></div></div></article>)}</div>:<LiveEmpty title="Пока нет опубликованных мероприятий" text="Как только организатор создаст событие, оно появится здесь."/>}
     {ticket&&<div className="modalLayer" onMouseDown={()=>setTicket(null)}><div className="ticketModal" onMouseDown={e=>e.stopPropagation()}><button className="modalClose" onClick={()=>setTicket(null)}>×</button><div className="ticketBrand">DOSTEAM <span>HUB</span></div><p>ЭЛЕКТРОННЫЙ БИЛЕТ</p><h3>{ticket.title}</h3><div className="ticketMeta"><span><small>ДАТА И ВРЕМЯ</small>{ticket.date} {ticket.month}, {ticket.time}</span><span><small>МЕСТО</small>{ticket.place}</span><span><small>СТАТУС</small><b>REGISTERED</b></span><span><small>КОД</small>{ticket.ticketCode}</span></div>{ticket.ticketCode&&<img className="realQr" src={`/api/ticket/${ticket.ticketCode}`} alt="QR-код билета"/>}<small className="ticketCode">{ticket.ticketCode}</small><button className="primary wide" onClick={()=>window.location.assign("/join")}>Открыть мои билеты</button></div></div>}
@@ -68,13 +46,13 @@ function EventsView({ flash }: { flash: (message: string) => void }) {
 
 function ClubsView({ flash }: { flash: (message: string) => void }) {
   const live=useLiveData(); const [following,setFollowing]=useState<string[]>([]); const [selected,setSelected]=useState<ClubCard|null>(null);
-  const source=(live?.clubs||[]).map((c,i)=>({id:String(c.id),name:String(c.name),type:String(c.direction||"Сообщество"),followers:Number(c.followers||0),members:Number(c.members||0),posts:0,letters:String(c.name).split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase(),color:["#111","#2672ff","#7442d6","#e78b27","#16956c"][i%5],trend:"NEW"}));
+  const source=(live?.clubs||[]).map((c,i)=>({id:String(c.id),name:String(c.name),type:String(c.direction||"Направление не указано"),description:String(c.description||"Описание клуба пока не добавлено."),followers:Number(c.followers||0),members:Number(c.members||0),posts:Number(c.posts||0),letters:String(c.name).split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase(),color:["#111","#2672ff","#7442d6","#e78b27","#16956c"][i%5],logoUrl:c.logo_url?String(c.logo_url):undefined,instagram:String(c.instagram||""),telegram:String(c.telegram||"")}));
   const memberAction=async(club:ClubCard,action:"followClub"|"joinClub")=>{const r=await fetch("/api/member",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,clubId:club.id})});const result=await r.json();if(r.status===401||result.onboarding){window.location.assign("/join");return}if(!r.ok){flash(result.error||"Не удалось выполнить действие");return}if(action==="followClub")setFollowing(x=>result.following?[...x.filter(n=>n!==club.name),club.name]:x.filter(n=>n!==club.name));else flash("Заявка отправлена — на рассмотрении")};
-  return <div className="pageContent"><PageIntro eyebrow="НАЙДИ СВОИХ" title="Студенческие клубы" text="Подписывайся на новости или становись частью команды." action={<button className="primary" onClick={()=>flash("Форма нового клуба открыта")}>+ Создать клуб</button>}/>
-    {source[0]&&<div className="clubHero"><div><span>НОВОЕ СООБЩЕСТВО</span><h3>{source[0].name}</h3><p>{source[0].type}. Следи за новостями и становись частью команды.</p><button onClick={()=>setSelected(source[0])}>Открыть клуб →</button></div><strong>JOIN<br/><i>THE</i><br/>TEAM.</strong></div>}
+  return <div className="pageContent"><PageIntro eyebrow="НАЙДИ СВОИХ" title="Студенческие клубы" text="Здесь отображаются только одобренные и активные клубы ЕАГИ."/>
+    {source[0]&&<div className="clubHero"><div><span>АКТИВНЫЙ КЛУБ</span><h3>{source[0].name}</h3><p>{source[0].description}</p><button onClick={()=>setSelected(source[0])}>Открыть клуб →</button></div><strong>JOIN<br/><i>THE</i><br/>TEAM.</strong></div>}
     <div className="catalogHead"><h3>Все клубы <span>{source.length}</span></h3><div className="filterSearch">⌕ <input placeholder="Найти клуб"/></div></div>
-    {!live?<LiveLoading/>:source.length?<div className="clubCatalog">{source.map(club=><article key={club.name}><div className="clubCover" style={{background:club.color}}><span>{club.letters}</span><em>{club.trend}</em></div><div className="clubBody"><h3>{club.name}</h3><p>{club.type}</p><div className="clubNumbers"><span><b>{club.followers}</b> подписчиков</span><span><b>{club.members}</b> участников</span><span><b>{club.posts}</b> постов</span></div><div className="clubActions"><button className={following.includes(club.name)?"following":""} onClick={()=>memberAction(club,"followClub")}>{following.includes(club.name)?"✓ Подписан":"Подписаться"}</button><button onClick={()=>setSelected(club)}>Вступить</button></div></div></article>)}</div>:<LiveEmpty title="Клубов пока нет" text="После создания первого клуба в Admin Panel он появится здесь."/>}
-    {selected&&<div className="modalLayer" onMouseDown={()=>setSelected(null)}><div className="clubProfileModal" onMouseDown={e=>e.stopPropagation()}><button className="modalClose" onClick={()=>setSelected(null)}>×</button><div className="clubProfileTop" style={{background:selected.color}}><div className="bigClubLogo">{selected.letters}</div><span>{selected.type}</span></div><h2>{selected.name}</h2><p>Открытое сообщество студентов ЕАГИ, где идеи превращаются в проекты, а знакомства — в сильные команды.</p><div className="clubProfileStats"><span><b>{selected.followers}</b>Подписчиков</span><span><b>{selected.members}</b>Участников</span><span><b>{selected.posts}</b>Постов</span></div><div className="tabs"><button className="active">Посты</button><button>Мероприятия</button><button>Участники</button><button>О клубе</button></div><div className="miniPost"><b>📢 Открыт набор в команду!</b><p>Расскажи о себе и выбери направление, в котором хочешь развиваться.</p></div><button className="primary wide" onClick={()=>{void memberAction(selected,"joinClub");setSelected(null)}}>Отправить заявку на вступление</button></div></div>}
+    {!live?<LiveLoading/>:source.length?<div className="clubCatalog">{source.map(club=><article key={club.name}><div className="clubCover" style={{background:club.color}}>{club.logoUrl?<img src={club.logoUrl} alt={`Логотип ${club.name}`}/>:<span>{club.letters}</span>}</div><div className="clubBody"><h3>{club.name}</h3><p>{club.type}</p><div className="clubNumbers"><span><b>{club.followers}</b> подписчиков</span><span><b>{club.members}</b> участников</span><span><b>{club.posts}</b> постов</span></div><div className="clubActions"><button className={following.includes(club.name)?"following":""} onClick={()=>memberAction(club,"followClub")}>{following.includes(club.name)?"✓ Подписан":"Подписаться"}</button><button onClick={()=>setSelected(club)}>Вступить</button></div></div></article>)}</div>:<LiveEmpty title="Клубов пока нет" text="Одобренные клубы появятся здесь."/>}
+    {selected&&<div className="modalLayer" onMouseDown={()=>setSelected(null)}><div className="clubProfileModal" onMouseDown={e=>e.stopPropagation()}><button className="modalClose" onClick={()=>setSelected(null)}>×</button><div className="clubProfileTop" style={{background:selected.color}}><div className="bigClubLogo">{selected.logoUrl?<img src={selected.logoUrl} alt=""/>:selected.letters}</div><span>{selected.type}</span></div><h2>{selected.name}</h2><p>{selected.description}</p><div className="clubProfileStats"><span><b>{selected.followers}</b>Подписчиков</span><span><b>{selected.members}</b>Участников</span><span><b>{selected.posts}</b>Постов</span></div>{selected.instagram&&<p>Instagram: {selected.instagram}</p>}{selected.telegram&&<p>Telegram: {selected.telegram}</p>}<button className="primary wide" onClick={()=>{void memberAction(selected,"joinClub");setSelected(null)}}>Отправить заявку на вступление</button></div></div>}
   </div>;
 }
 
@@ -92,32 +70,46 @@ function FeedView({ flash }: { flash: (message: string) => void }) {
   </div>;
 }
 
-function LeaderboardView() {
-  const [period,setPeriod]=useState("Семестр");
-  return <div className="pageContent"><PageIntro eyebrow="АКТИВНОСТЬ, КОТОРАЯ ВИДНА" title="Рейтинг студентов" text="Рейтинг строится на XP, заработанном за реальное участие в жизни ЕАГИ."/>
-    <div className="rankFilters"><div>{["Общий","Факультет","Группа","Клуб"].map(x=><button className={x==="Общий"?"active":""} key={x}>{x}</button>)}</div><select value={period} onChange={e=>setPeriod(e.target.value)}><option>Месяц</option><option>Семестр</option><option>Учебный год</option></select></div>
-    <div className="podium"><div className="podiumPerson second"><Avatar text="NA"/><i>2</i><b>Нұрдәулет Әли</b><span>7 980 XP</span></div><div className="podiumPerson first"><div className="crown">♛</div><Avatar text="AS"/><i>1</i><b>Аружан Сәрсен</b><span>8 420 XP</span></div><div className="podiumPerson third"><Avatar text="AQ"/><i>3</i><b>Айша Қанат</b><span>7 650 XP</span></div></div>
-    <section className="rankTable"><header><span>МЕСТО</span><span>СТУДЕНТ</span><span>УРОВЕНЬ</span><span>ДОСТИЖЕНИЯ</span><span>XP</span></header>{leaderData.map(r=><div key={r[0]}><strong>{r[0]}</strong><span className="rankStudent"><Avatar text={String(r[6])} small/><b>{r[1]}<small>{r[2]}</small></b></span><span><em>{r[3]}</em></span><span>{r[5]}</span><b>{Number(r[4]).toLocaleString("ru-RU")}</b></div>)}<div className="myRank"><strong>12</strong><span className="rankStudent"><Avatar text="DK" small/><b>Досмухамед <i>ВЫ</i><small>ЮТК-25</small></b></span><span><em>Лидер</em></span><span>14</span><b>2 450</b></div></section>
+function LeaderboardView({identity}:{identity:HubIdentity}) {
+  const live=useLiveData();
+  const rows=live?.leaderboard||[];
+  const podium=rows.slice(0,3);
+  const initials=(name:unknown)=>String(name||"S").split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+  return <div className="pageContent"><PageIntro eyebrow="АКТИВНОСТЬ, КОТОРАЯ ВИДНА" title="Рейтинг студентов" text="Здесь только реальные профили. Место определяется количеством подтверждённого XP."/>
+    <div className="rankFilters"><div><button className="active">Общий рейтинг</button></div><select defaultValue="all" aria-label="Период рейтинга"><option value="all">За всё время</option></select></div>
+    {!live?<LiveLoading/>:rows.length?<><div className="podium">{podium.map((row,index)=><div className={`podiumPerson ${index===0?"first":index===1?"second":"third"}`} key={String(row.user_id)}>{index===0&&<div className="crown">♛</div>}<Avatar text={initials(row.full_name)} imageUrl={row.avatar_url?String(row.avatar_url):null}/><i>{index+1}</i><b>{String(row.full_name)}</b><span>{Number(row.xp||0).toLocaleString("ru-RU")} XP</span></div>)}</div>
+    <section className="rankTable"><header><span>МЕСТО</span><span>СТУДЕНТ</span><span>УРОВЕНЬ</span><span>ДОСТИЖЕНИЯ</span><span>XP</span></header>{rows.map((row,index)=><div className={String(row.user_id)===identity.userId?"myRank":""} key={String(row.user_id)}><strong>{index+1}</strong><span className="rankStudent"><Avatar text={initials(row.full_name)} imageUrl={row.avatar_url?String(row.avatar_url):null} small/><b>{String(row.full_name)}{String(row.user_id)===identity.userId&&<i> ВЫ</i>}<small>{String(row.group_name||"ЕАГИ")}</small></b></span><span><em>{String(row.level_name||"Новичок")}</em></span><span>{Number(row.achievements||0)}</span><b>{Number(row.xp||0).toLocaleString("ru-RU")}</b></div>)}</section></>:<LiveEmpty title="Рейтинг пока пуст" text="Он появится, когда студенты заполнят публичные профили."/>}
   </div>;
 }
 
 function RoomsView({ flash }: { flash: (message: string) => void }) {
   const live=useLiveData(); const rooms=(live?.rooms||[]).map(r=>({name:String(r.name),cap:Number(r.capacity),equip:(()=>{try{return(JSON.parse(String(r.equipment_json)) as string[]).join(" · ")}catch{return""}})(),busy:0})); const [selected,setSelected]=useState(""); const current=selected||rooms[0]?.name||"Помещение";
-  return <div className="pageContent"><PageIntro eyebrow="ПЛАНИРУЙ БЕЗ НАКЛАДОК" title="Бронирование помещений" text="Выбери свободное время и отправь заявку администратору." action={<button className="primary" onClick={()=>flash("Заявка создана — заполните детали")}>+ Новая заявка</button>}/>
-    {!live?<LiveLoading/>:rooms.length?<div className="roomLayout"><div className="roomList">{rooms.map(r=><button className={current===r.name?"active":""} onClick={()=>setSelected(r.name)} key={r.name}><div className="roomIcon">▦</div><div><b>{r.name}</b><span>До {r.cap} человек · {r.equip||"Без оборудования"}</span></div><em>Доступно</em></button>)}</div><section className="scheduleCard"><header><div><span>РАСПИСАНИЕ</span><h3>{current}</h3></div><input type="date" defaultValue="2026-08-24"/></header><div className="timeGrid">{["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map(t=><button key={t} className="free"><b>{t}</b><span>Свободно</span></button>)}</div><div className="scheduleLegend"><span><i className="free"/>Свободно</span><span><i className="busy"/>Занято</span></div></section></div>:<LiveEmpty title="Помещения не добавлены" text="Администратор добавит аудитории и конференц-залы — после этого откроется расписание."/>}
+  return <div className="pageContent"><PageIntro eyebrow="ПЛАНИРУЙ БЕЗ НАКЛАДОК" title="Помещения" text="Здесь отображаются реальные доступные помещения ЕАГИ."/>
+    {!live?<LiveLoading/>:rooms.length?<div className="roomLayout"><div className="roomList">{rooms.map(r=><button className={current===r.name?"active":""} onClick={()=>setSelected(r.name)} key={r.name}><div className="roomIcon">▦</div><div><b>{r.name}</b><span>До {r.cap} человек · {r.equip||"Оснащение не указано"}</span></div><em>Активно</em></button>)}</div><section className="scheduleCard"><header><div><span>ВЫБРАНО ПОМЕЩЕНИЕ</span><h3>{current}</h3></div></header><div className="liveState compact"><i>▦</i><h3>Расписание пока не опубликовано</h3><p>Свободные интервалы появятся после подключения реальных заявок на бронирование.</p></div></section></div>:<LiveEmpty title="Помещения не добавлены" text="Доступные помещения появятся здесь после добавления администратором."/>}
   </div>;
 }
 
 function firstMedia(value:unknown){try{const list=JSON.parse(String(value||"[]")) as (string|{url:string;type:string})[];const first=list[0];return typeof first==="string"?{url:first,type:"image/jpeg"}:first||null}catch{return null}}
 function LiveLoading(){return <div className="liveState"><i>···</i><p>Загружаем данные HUB</p></div>}
-function LiveEmpty({title,text}:{title:string;text:string}){return <div className="liveState"><i>＋</i><h3>{title}</h3><p>{text}</p><a href="/manage">Открыть Admin Panel →</a></div>}
+function LiveEmpty({title,text}:{title:string;text:string}){return <div className="liveState"><i>＋</i><h3>{title}</h3><p>{text}</p></div>}
 
-function RewardsView({ flash }: { flash: (message: string) => void }) {
-  const transactions=[['+30','Волонтёрство на EAGI CUP','18 авг','plus'],['-250','Худи DOSTEAM','15 авг','minus'],['+10','Участие в Debate Night','12 авг','plus'],['+50','Организация Movie Night','08 авг','plus']];
-  return <div className="pageContent"><PageIntro eyebrow="ТВОЯ АКТИВНОСТЬ — ТВОЯ ВАЛЮТА" title="DC Coins & Rewards" text="Coins можно тратить. XP остаётся с тобой и определяет уровень."/>
-    <div className="walletHero"><div><span>ТЕКУЩИЙ БАЛАНС</span><h2>1 280 <small>DC</small></h2><p>+90 DC в этом месяце</p></div><div className="coinBig">D</div><button onClick={()=>flash("QR-карта участника открыта")}>Моя карта →</button></div>
-    <div className="rewardLayout"><section className="sectionCard"><div className="sectionHead"><div><span>ИСТОРИЯ</span><h3>Операции</h3></div><button>Все операции →</button></div>{transactions.map((t,i)=><div className="transaction" key={i}><span className={t[3]}>{t[0]}</span><div><b>{t[1]}</b><small>{t[2]} 2026 · Подтверждено</small></div><em>DC</em></div>)}</section><section className="sectionCard earning"><div className="sectionHead"><div><span>КАК ЗАРАБОТАТЬ</span><h3>Активности</h3></div></div><div><span>◇<b>Участие</b><em>+10 DC</em></span><span>♡<b>Волонтёрство</b><em>+30 DC</em></span><span>✦<b>Организация</b><em>+50 DC</em></span><span>♛<b>Победа</b><em>+100 DC</em></span></div></section></div>
-    <div className="catalogHead"><h3>Магазин наград</h3><button>Все награды →</button></div><div className="rewardCatalog">{[['Худи DOSTEAM','750','hoodie'],['Шоппер HUB','350','bag'],['Закрытая встреча','500','access'],['Приоритетная бронь','300','room']].map((r,i)=><article key={r[0]}><div className={`rewardArt ${r[2]}`}>{i===0?'D':i===1?'DOSTEAM':i===2?'VIP':'▦'}</div><h3>{r[0]}</h3><p>{i<2?'Лимитированный мерч':'Специальная привилегия'}</p><button onClick={()=>flash(`${r[0]} добавлен в заявку`)}>{r[1]} DC</button></article>)}</div>
+type MemberHubData={transactions?:Record<string,unknown>[];achievements?:Record<string,unknown>[];rewards?:Record<string,unknown>[];stats?:Record<string,unknown>};
+function useMemberData(){const [data,setData]=useState<MemberHubData|null>(null);useEffect(()=>{fetch("/api/member").then(r=>r.json()).then(setData).catch(()=>setData({transactions:[],achievements:[],rewards:[],stats:{}}))},[]);return data}
+
+function AchievementsView(){
+  const member=useMemberData();const rows=member?.achievements||[];
+  return <div className="pageContent"><PageIntro eyebrow="ЦИФРОВОЙ ПРОГРЕСС" title="Достижения" text="Достижения — это значки за выполненные условия. Они остаются в профиле и могут давать XP или DC Coins."/>
+    {!member?<LiveLoading/>:rows.length?<div className="achievementCatalog">{rows.map(row=>{const unlocked=Boolean(row.unlocked_at);const progress=Number(row.progress||0),target=Math.max(1,Number(row.rule_value||1));return <article className={unlocked?"unlocked":"locked"} key={String(row.id)}><div className="achievementIcon">{String(row.icon||"✦")}</div><span>{String(row.category||"Активность")}</span><h3>{String(row.name)}</h3><p>{String(row.description||"Описание пока не добавлено")}</p><div className="achievementProgress"><i style={{width:`${Math.min(100,progress/target*100)}%`}}/></div><small>{unlocked?`Получено ${new Date(Number(row.unlocked_at)).toLocaleDateString("ru-RU")}`:`Прогресс: ${progress} из ${target}`}</small><footer><b>+{Number(row.xp_reward||0)} XP</b><b>+{Number(row.coin_reward||0)} DC</b></footer></article>})}</div>:<LiveEmpty title="Достижений пока нет" text="Администратор ещё не создал условия достижений."/>}
+  </div>;
+}
+
+function RewardsView({identity}:{identity:HubIdentity}) {
+  const member=useMemberData();const transactions=member?.transactions||[];const rewards=member?.rewards||[];
+  const monthStart=new Date();monthStart.setDate(1);monthStart.setHours(0,0,0,0);const earnedThisMonth=transactions.filter(t=>Number(t.amount)>0&&Number(t.created_at)>=monthStart.getTime()).reduce((sum,t)=>sum+Number(t.amount||0),0);
+  return <div className="pageContent"><PageIntro eyebrow="ВНУТРЕННЯЯ ВАЛЮТА HUB" title="DC Coins" text="DC Coins можно заработать за подтверждённую активность и потратить на реальные предложения. XP при этом не расходуется."/>
+    <div className="walletHero"><div><span>ТЕКУЩИЙ БАЛАНС</span><h2>{identity.coins.toLocaleString("ru-RU")} <small>DC</small></h2><p>+{earnedThisMonth.toLocaleString("ru-RU")} DC в этом месяце</p></div><div className="coinBig">D</div></div>
+    <div className="rewardLayout"><section className="sectionCard"><div className="sectionHead"><div><span>ИСТОРИЯ</span><h3>Операции</h3></div></div>{!member?<LiveLoading/>:transactions.length?transactions.map(t=><div className="transaction" key={String(t.id)}><span className={Number(t.amount)>=0?"plus":"minus"}>{Number(t.amount)>0?"+":""}{Number(t.amount)}</span><div><b>{String(t.reason||"Операция DC Coins")}</b><small>{new Date(Number(t.created_at)).toLocaleDateString("ru-RU")} · Баланс {Number(t.balance_after||0)} DC</small></div><em>DC</em></div>):<div className="emptyMini"><b>Операций пока нет</b><span>Начисления и списания появятся после подтверждённой активности.</span></div>}</section><section className="sectionCard currencyGuide"><div className="sectionHead"><div><span>НЕ ПУТАТЬ</span><h3>XP и DC Coins</h3></div></div><div><b>XP</b><p>Опыт для уровня и рейтинга. XP нельзя потратить.</p></div><div><b>DC Coins</b><p>Валюта HUB. Её можно начислять и списывать.</p></div></section></div>
+    <div className="catalogHead"><h3>Магазин наград</h3></div>{!member?<LiveLoading/>:rewards.length?<div className="rewardCatalog">{rewards.map(reward=><article key={String(reward.id)}>{reward.image_url?<img className="rewardArt" src={String(reward.image_url)} alt=""/>:<div className="rewardArt">D</div>}<h3>{String(reward.name)}</h3><p>{String(reward.description||"Описание пока не добавлено")}</p><button disabled>{Number(reward.cost||0)} DC · Обмен через администратора</button></article>)}</div>:<LiveEmpty title="Наград для обмена пока нет" text="Магазин появится после добавления реальных товаров или привилегий администратором."/>}
   </div>;
 }
 

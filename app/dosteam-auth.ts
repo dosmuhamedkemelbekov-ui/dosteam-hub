@@ -4,6 +4,8 @@ import { adminEmails, hubEnv } from "./runtime";
 
 const SESSION_COOKIE = "dosteam_session";
 const SESSION_AGE_SECONDS = 60 * 60 * 24 * 30;
+const ADMIN_TRUST_COOKIE = "dosteam_admin_trust";
+const ADMIN_TRUST_AGE_SECONDS = 60 * 60 * 24 * 180;
 
 export type DosteamUser = {
   id: string;
@@ -73,6 +75,36 @@ export async function createDosteamSession(userId: string, mfaVerified: boolean)
       .bind(crypto.randomUUID(), userId, await sha256(token), now + SESSION_AGE_SECONDS * 1000, now, now, mfaVerified ? now : null),
   ]);
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly:true, secure:true, sameSite:"lax", path:"/", maxAge:SESSION_AGE_SECONDS });
+}
+
+export async function rememberAdminDevice(userId: string) {
+  const db = hubEnv.DB;
+  if (!db) throw new Error("База данных недоступна");
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
+  const now = Date.now();
+  await db.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at,created_at,last_seen_at,mfa_verified_at) VALUES (?,?,?,?,?,?,?)")
+    .bind(crypto.randomUUID(), userId, await sha256(token), now + ADMIN_TRUST_AGE_SECONDS * 1000, now, now, now).run();
+  (await cookies()).set(ADMIN_TRUST_COOKIE, token, { httpOnly:true, secure:true, sameSite:"lax", path:"/", maxAge:ADMIN_TRUST_AGE_SECONDS });
+}
+
+export async function hasTrustedAdminDevice(userId: string) {
+  const db = hubEnv.DB;
+  const token = (await cookies()).get(ADMIN_TRUST_COOKIE)?.value;
+  if (!db || !token) return false;
+  const row = await db.prepare(
+    `SELECT s.id
+       FROM auth_sessions s
+       JOIN users u ON u.id=s.user_id
+      WHERE s.token_hash=? AND s.user_id=? AND s.expires_at>?
+        AND s.mfa_verified_at IS NOT NULL AND u.role='admin' AND u.status='active'
+      LIMIT 1`,
+  ).bind(await sha256(token), userId, Date.now()).first<{id:string}>();
+  if (!row) {
+    (await cookies()).set(ADMIN_TRUST_COOKIE, "", { httpOnly:true, secure:true, sameSite:"lax", path:"/", maxAge:0 });
+    return false;
+  }
+  await db.prepare("UPDATE auth_sessions SET last_seen_at=? WHERE id=?").bind(Date.now(), row.id).run();
+  return true;
 }
 
 export async function destroyDosteamSession() {

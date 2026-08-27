@@ -42,18 +42,19 @@ export async function GET() {
   });
   if (admin.role !== "admin" || admin.status !== "active") return json({ authenticated: true, setupRequired: false, role: admin.role, error: "Нет прав администратора" }, 403);
 
-  const [students, clubs, rooms, events, levels, achievements, transactions, posts, summary] = await Promise.all([
+  const [students, clubs, rooms, events, levels, achievements, rewards, transactions, posts, summary] = await Promise.all([
     db.prepare("SELECT u.id, u.email, u.role, u.status, p.full_name, p.group_name, p.faculty, p.xp, p.coin_balance FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.created_at DESC LIMIT 100").all(),
     db.prepare("SELECT id, name, direction, status, instagram, telegram, created_at FROM clubs ORDER BY created_at DESC LIMIT 100").all(),
     db.prepare("SELECT id, name, capacity, location, equipment_json, is_active FROM rooms ORDER BY name").all(),
     db.prepare("SELECT e.id, e.title, e.category, e.starts_at, e.ends_at, e.capacity, e.status, e.place_text, c.name club_name, COUNT(r.id) registered, SUM(CASE WHEN r.status = 'attended' THEN 1 ELSE 0 END) attended FROM events e LEFT JOIN clubs c ON c.id=e.club_id LEFT JOIN registrations r ON r.event_id=e.id GROUP BY e.id ORDER BY e.starts_at DESC LIMIT 100").all(),
     db.prepare("SELECT id, name_ru, min_xp, rank, is_active FROM levels ORDER BY rank").all(),
     db.prepare("SELECT id, name, description, rule_type, rule_value, xp_reward, coin_reward, is_active FROM achievements ORDER BY name LIMIT 100").all(),
+    db.prepare("SELECT id, name, description, cost, stock, image_url, is_active FROM rewards ORDER BY name LIMIT 100").all(),
     db.prepare("SELECT ct.id, ct.amount, ct.reason, ct.created_at, p.full_name FROM coin_transactions ct JOIN profiles p ON p.user_id=ct.user_id ORDER BY ct.created_at DESC LIMIT 20").all(),
     db.prepare("SELECT p.id,p.body,p.media_json,p.published_at,c.name club_name,(SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id=p.id AND pr.type='like') likes,(SELECT COUNT(*) FROM comments cm WHERE cm.post_id=p.id AND cm.deleted_at IS NULL) comments FROM posts p JOIN clubs c ON c.id=p.club_id ORDER BY p.published_at DESC LIMIT 100").all(),
     db.prepare("SELECT (SELECT COUNT(*) FROM users WHERE role='student') students, (SELECT COUNT(*) FROM clubs WHERE status='active') clubs, (SELECT COUNT(*) FROM events) events, (SELECT COUNT(*) FROM rooms WHERE is_active=1) rooms, (SELECT COALESCE(SUM(CASE WHEN amount>0 THEN amount ELSE 0 END),0) FROM coin_transactions) coins_issued").first(),
   ]);
-  return json({ authenticated: true, setupRequired: false, profile: { email: auth.email, name: auth.displayName, role: admin.role }, students: students.results, clubs: clubs.results, rooms: rooms.results, events: events.results, levels: levels.results, achievements: achievements.results, transactions: transactions.results, posts: posts.results, summary });
+  return json({ authenticated: true, setupRequired: false, profile: { email: auth.email, name: auth.displayName, role: admin.role }, students: students.results, clubs: clubs.results, rooms: rooms.results, events: events.results, levels: levels.results, achievements: achievements.results, rewards: rewards.results, transactions: transactions.results, posts: posts.results, summary });
 }
 
 export async function POST(request: Request) {
@@ -92,10 +93,15 @@ export async function POST(request: Request) {
       await db.batch([db.prepare("UPDATE profiles SET coin_balance=? WHERE user_id=?").bind(balance,target.id),db.prepare("INSERT INTO coin_transactions (id,user_id,amount,balance_after,reason,source_type,created_at,created_by) VALUES (?,?,?,?,?,?,?,?)").bind(id,target.id,amount,balance,value(body,"reason"),"admin",now,admin.id)]);
     } else if (action === "createAchievement") {
       await db.prepare("INSERT INTO achievements (id,name,description,category,rule_type,rule_value,xp_reward,coin_reward,is_hidden,is_active) VALUES (?,?,?,?,?,?,?,?,0,1)").bind(id,value(body,"name"),String(body.description||""),String(body.category||"Общее"),String(body.ruleType||"events_attended"),Number(body.ruleValue)||1,Number(body.xpReward)||0,Number(body.coinReward)||0).run();
+    } else if (action === "createReward") {
+      const cost=Number(body.cost), stock=Number(body.stock);
+      if(!Number.isInteger(cost)||cost<0) throw new Error("Стоимость должна быть целым неотрицательным числом");
+      if(!Number.isInteger(stock)||stock<0) throw new Error("Остаток должен быть целым неотрицательным числом");
+      await db.prepare("INSERT INTO rewards (id,name,description,cost,stock,image_url,is_active) VALUES (?,?,?,?,?,?,1)").bind(id,value(body,"name"),String(body.description||""),cost,stock,String(body.imageUrl||"")).run();
     } else if (action === "createPost") {
       await db.prepare("INSERT INTO posts (id,club_id,author_id,body,tags_json,link_url,media_json,status,view_count,published_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,?,?)").bind(id,value(body,"clubId"),admin.id,value(body,"body"),JSON.stringify(String(body.tags||"").split(/\s+/).filter(x=>x.startsWith("#"))),String(body.linkUrl||""),JSON.stringify(body.mediaUrl?[{url:String(body.mediaUrl),type:String(body.mediaType||"image/jpeg")}]:[]),"published",now,now).run();
     } else if (action === "delete") {
-      const entity=String(body.entity), target=value(body,"id"); const map:Record<string,string>={club:"clubs",room:"rooms",event:"events",achievement:"achievements",post:"posts"}; if(!map[entity]) throw new Error("Неизвестный тип записи"); await db.prepare(`DELETE FROM ${map[entity]} WHERE id=?`).bind(target).run();
+      const entity=String(body.entity), target=value(body,"id"); const map:Record<string,string>={club:"clubs",room:"rooms",event:"events",achievement:"achievements",reward:"rewards",post:"posts"}; if(!map[entity]) throw new Error("Неизвестный тип записи"); await db.prepare(`DELETE FROM ${map[entity]} WHERE id=?`).bind(target).run();
     } else return json({ error: "Неизвестное действие" }, 400);
     return json({ ok: true });
   } catch (error) {

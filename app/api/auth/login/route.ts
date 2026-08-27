@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createDosteamSession, ensureDosteamAccount, safeReturnTo } from "../../../dosteam-auth";
+import { createDosteamSession, ensureDosteamAccount, hasTrustedAdminDevice, safeReturnTo } from "../../../dosteam-auth";
 import { authErrorMessage, supabaseAuthClient } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,10 @@ export async function POST(request: Request) {
     if (account.role !== "admin") {
       await createDosteamSession(account.id, false);
       return Response.json({ ok:true, returnTo });
+    }
+    if (await hasTrustedAdminDevice(account.id)) {
+      await createDosteamSession(account.id, true);
+      return Response.json({ ok:true, returnTo: returnTo === "/join" ? "/manage" : returnTo });
     }
 
     const jar = await cookies();

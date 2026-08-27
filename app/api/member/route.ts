@@ -8,13 +8,17 @@ export async function GET() {
   if(!ctx.user)return apiJson({authenticated:true,onboarding:true,email:ctx.auth.email,name:ctx.auth.displayName});
   const profile=await ctx.db.prepare("SELECT p.*,l.name_ru level_name FROM profiles p LEFT JOIN levels l ON l.id=p.level_id WHERE p.user_id=?").bind(ctx.user.id).first();
   if(!profile)return apiJson({authenticated:true,onboarding:true,email:ctx.auth.email,name:ctx.auth.displayName});
-  const [tickets,memberships,follows,notices]=await Promise.all([
+  const [tickets,memberships,follows,notices,transactions,achievements,rewards,stats]=await Promise.all([
     ctx.db.prepare("SELECT r.id,r.ticket_code,r.status,r.registered_at,e.title,e.starts_at,e.ends_at,e.place_text,e.xp_reward,e.coin_reward FROM registrations r JOIN events e ON e.id=r.event_id WHERE r.user_id=? ORDER BY e.starts_at DESC LIMIT 30").bind(ctx.user.id).all(),
     ctx.db.prepare("SELECT m.id,m.status,m.role,c.name,c.direction FROM club_memberships m JOIN clubs c ON c.id=m.club_id WHERE m.user_id=? ORDER BY m.applied_at DESC").bind(ctx.user.id).all(),
     ctx.db.prepare("SELECT c.id,c.name,f.notifications_enabled FROM club_follows f JOIN clubs c ON c.id=f.club_id WHERE f.user_id=? ORDER BY f.created_at DESC").bind(ctx.user.id).all(),
     ctx.db.prepare("SELECT id,type,title,body,action_url,read_at,created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 30").bind(ctx.user.id).all(),
+    ctx.db.prepare("SELECT id,amount,balance_after,reason,source_type,created_at FROM coin_transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 50").bind(ctx.user.id).all(),
+    ctx.db.prepare("SELECT a.id,a.name,a.description,a.icon,a.category,a.rule_type,a.rule_value,a.xp_reward,a.coin_reward,COALESCE(ua.progress,0) progress,ua.unlocked_at FROM achievements a LEFT JOIN user_achievements ua ON ua.achievement_id=a.id AND ua.user_id=? WHERE a.is_active=1 AND (a.is_hidden=0 OR ua.unlocked_at IS NOT NULL) ORDER BY CASE WHEN ua.unlocked_at IS NULL THEN 1 ELSE 0 END,ua.unlocked_at DESC,a.name").bind(ctx.user.id).all(),
+    ctx.db.prepare("SELECT id,name,description,cost,stock,image_url FROM rewards WHERE is_active=1 AND stock!=0 ORDER BY cost,name LIMIT 50").all(),
+    ctx.db.prepare("SELECT (SELECT COUNT(*) FROM user_achievements WHERE user_id=? AND unlocked_at IS NOT NULL) achievements,(SELECT COUNT(*) FROM registrations WHERE user_id=? AND status='attended') attended").bind(ctx.user.id,ctx.user.id).first(),
   ]);
-  return apiJson({authenticated:true,onboarding:false,user:ctx.user,profile,tickets:tickets.results,memberships:memberships.results,follows:follows.results,notifications:notices.results});
+  return apiJson({authenticated:true,onboarding:false,user:ctx.user,profile,tickets:tickets.results,memberships:memberships.results,follows:follows.results,notifications:notices.results,transactions:transactions.results,achievements:achievements.results,rewards:rewards.results,stats});
 }
 
 export async function POST(request:Request) {
@@ -26,6 +30,22 @@ export async function POST(request:Request) {
     try{await ctx.db.prepare("INSERT INTO profiles (user_id,full_name,student_id,faculty,group_name,course,avatar_url,bio,interests_json,xp,coin_balance,level_id,is_public) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)").bind(ctx.user.id,fullName,studentId,cleanText(body.faculty,100),groupName,Number(body.course)||1,cleanText(body.avatarUrl,500),cleanText(body.bio,500),JSON.stringify(Array.isArray(body.interests)?body.interests:[]),0,0,level?.id||null).run();return apiJson({ok:true});}catch{return apiJson({error:"Этот студенческий ID уже зарегистрирован"},409)}
   }
   const ctx=await requireHubUser(); if("error" in ctx)return ctx.error; const now=Date.now();
+  if(action==="updateProfile") {
+    const fullName=cleanText(body.fullName,120),studentId=cleanText(body.studentId,40),groupName=cleanText(body.groupName,40);
+    if(!fullName||!studentId||!groupName)return apiJson({error:"Укажите имя, студенческий ID и группу"},400);
+    const current=await ctx.db.prepare("SELECT avatar_url FROM profiles WHERE user_id=?").bind(ctx.user.id).first<{avatar_url:string|null}>();
+    if(!current)return apiJson({error:"Профиль не найден",onboarding:true},404);
+    const avatarUrl=Object.prototype.hasOwnProperty.call(body,"avatarUrl")?cleanText(body.avatarUrl,500):current.avatar_url;
+    const interests=Array.isArray(body.interests)?body.interests.map(x=>cleanText(x,40)).filter(Boolean).slice(0,12):[];
+    try{
+      await ctx.db.batch([
+        ctx.db.prepare("UPDATE profiles SET full_name=?,student_id=?,faculty=?,group_name=?,course=?,avatar_url=?,bio=?,interests_json=?,is_public=? WHERE user_id=?")
+          .bind(fullName,studentId,cleanText(body.faculty,100),groupName,Math.min(8,Math.max(1,Number(body.course)||1)),avatarUrl,cleanText(body.bio,500),JSON.stringify(interests),body.isPublic===false?0:1,ctx.user.id),
+        ctx.db.prepare("UPDATE users SET updated_at=? WHERE id=?").bind(now,ctx.user.id),
+      ]);
+      return apiJson({ok:true});
+    }catch{return apiJson({error:"Такой студенческий ID уже используется"},409)}
+  }
   if(action==="registerEvent") {
     const eventId=cleanText(body.eventId,100); const event=await ctx.db.prepare("SELECT id,title,capacity,starts_at,status FROM events WHERE id=?").bind(eventId).first<{id:string;title:string;capacity:number;starts_at:number;status:string}>(); if(!event||event.status!=="published")return apiJson({error:"Регистрация закрыта"},400);
     const count=await ctx.db.prepare("SELECT COUNT(*) total FROM registrations WHERE event_id=? AND status!='cancelled'").bind(eventId).first<{total:number}>(); if(Number(count?.total||0)>=event.capacity)return apiJson({error:"Свободных мест больше нет"},409);

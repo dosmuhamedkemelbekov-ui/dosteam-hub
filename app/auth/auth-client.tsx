@@ -38,7 +38,7 @@ export default function AuthClient({ confirmed, returnTo }:{confirmed:boolean;re
     <section className="authCard">
       <div className="mobileAuthLogo"><a className="brand" href="/auth"><span className="brandMark"><b>D</b></span><b>DOSTEAM</b><small>STUDENT HUB</small></a></div>
       <span>{mode==="mfa"?"ЗАЩИЩЁННЫЙ ДОСТУП":"ЛИЧНЫЙ КАБИНЕТ"}</span><h2>{title}</h2>
-      <p>{mode==="register"?"Используйте свой Gmail и придумайте пароль для DOSTEAM.":mode==="recover"?"Мы отправим защищённую ссылку на Gmail.":mode==="mfa"?(mfa?.setup?"Подключите приложение-аутентификатор и введите код.":"Введите одноразовый код из приложения-аутентификатора."):"Сначала войдите — затем откроется ваш персональный HUB."}</p>
+      <p>{mode==="register"?"Используйте свой Gmail и придумайте пароль для DOSTEAM.":mode==="recover"?"Мы отправим защищённую ссылку на Gmail.":mode==="mfa"?(mfa?.setup?"Подключите приложение-аутентификатор и введите код. После этого устройство будет доверенным.":"Введите код один раз — на этом устройстве повторное подтверждение не потребуется."):"Сначала войдите — затем откроется ваш персональный HUB."}</p>
       {message&&<div className="authNotice success">{message}</div>}{error&&<div className="authNotice error">{error}</div>}
       <form onSubmit={submit}>
         {mode==="register"&&<><label>ИМЯ И ФАМИЛИЯ<input value={fullName} onChange={e=>setFullName(e.target.value)} autoComplete="name" required placeholder="Досмухамед Кемелбеков"/></label></>}
@@ -56,4 +56,3 @@ export default function AuthClient({ confirmed, returnTo }:{confirmed:boolean;re
     </section>
   </main>;
 }
-

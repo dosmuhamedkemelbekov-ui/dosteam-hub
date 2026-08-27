@@ -2,7 +2,7 @@ import { apiJson, cleanText, hubEnv, requireHubUser } from "../_lib";
 
 export const dynamic = "force-dynamic";
 const allowed = new Set(["image/jpeg","image/png","image/webp","image/gif","video/mp4"]);
-const purposes = new Set(["avatar","club_logo","club_cover","event_cover","post_media"]);
+const purposes = new Set(["avatar","club_logo","club_cover","event_cover","post_media","reward_image"]);
 
 export async function POST(request: Request) {
   const ctx=await requireHubUser(); if("error" in ctx)return ctx.error;
