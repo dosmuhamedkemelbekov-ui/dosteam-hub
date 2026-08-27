@@ -23,6 +23,10 @@
   "build": {
     "command": "npm run build"
   },
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://xwxtiridpbpbfdwwsxjr.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_XZIs0M-_cWcCyOolLCEDCA_JlZIcygx"
+  },
   "observability": {
     "enabled": true
   }
