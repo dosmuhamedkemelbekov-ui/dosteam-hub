@@ -6,16 +6,16 @@ export type HubEnv = {
   NEXT_PUBLIC_SUPABASE_URL?: string;
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
   DOSTEAM_ADMIN_EMAILS?: string;
+  DOSTEAM_ADMIN_EMAIL?: string;
 };
 
 export const hubEnv = env as unknown as HubEnv;
 
 export function adminEmails() {
   return new Set(
-    String(hubEnv.DOSTEAM_ADMIN_EMAILS || "")
+    String(hubEnv.DOSTEAM_ADMIN_EMAILS || hubEnv.DOSTEAM_ADMIN_EMAIL || "")
       .split(",")
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
 }
-
