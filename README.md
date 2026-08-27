@@ -64,7 +64,36 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 
 Проект использует серверные функции, базу данных, файловое хранилище и авторизацию. Поэтому обычный GitHub Pages не подходит для полноценного запуска: он публикует только статические HTML/CSS/JS-файлы.
 
-Публичный репозиторий предназначен для хранения и развития исходного кода. Рабочая версия: [dosteam-hub.kemelbekov.chatgpt.site](https://dosteam-hub.kemelbekov.chatgpt.site).
+### Cloudflare Workers Builds
+
+Репозиторий содержит `wrangler.jsonc`, настроенный на результат сборки Vinext в папке `dist`. В Cloudflare укажите:
+
+```text
+Build command: (оставить пустым)
+Deploy command: npx wrangler deploy
+Root directory: /
+```
+
+Wrangler сам запустит `npm run build` из секции `build.command`, а затем опубликует Worker и статические файлы. Не используйте OpenNext: этот проект собирается через Vinext и не создаёт папку `.next`.
+
+В настройках Worker добавьте закрытые Variables and Secrets (не сохраняйте их в публичном GitHub):
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+DOSTEAM_ADMIN_EMAILS
+```
+
+Для полного запуска после первой публикации создайте Cloudflare D1 и R2 и добавьте Worker bindings:
+
+```text
+DB      → Cloudflare D1 database
+BUCKET  → Cloudflare R2 bucket
+```
+
+После подключения D1 примените SQL-миграции из папки `drizzle/`. Без binding `DB` публичная оболочка откроется, но личные кабинеты и данные HUB не будут сохраняться.
+
+Публичный репозиторий предназначен для хранения и развития исходного кода. Текущая рабочая версия: [dosteam-hub.kemelbekov.chatgpt.site](https://dosteam-hub.kemelbekov.chatgpt.site).
 
 ## Безопасность
 
